@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.log
+venv/
+.env
+.ssh/
+node_beacon.py
+setup_tx2.sh
+stage2_cluster.sh
+app/routes/nodes.py
+app/extensions.py
+EOF

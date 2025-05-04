@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Global Inference Engine</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #0e0e0e;
+      color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #00ffcc;
+    }
+
+    .control-panel {
+      background-color: #1a1a1a;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0, 255, 204, 0.1);
+    }
+
+    .control-panel h3 {
+      color: #00ffcc;
+      margin-bottom: 10px;
+    }
+
+    .control-panel input[type="text"] {
+      width: 70%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      margin-right: 10px;
+      font-size: 1em;
+      background-color: #333;
+      color: #fff;
+    }
+
+    .control-panel button {
+      padding: 10px 18px;
+      background-color: #00cc66;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .control-panel button:hover {
+      background-color: #00994d;
+    }
+
+    .node-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .node-card {
+      background-color: #1a1a1a;
+      border-left: 6px solid;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0, 255, 204, 0.1);
+      transition: transform 0.2s;
+    }
+
+    .node-card:hover {
+      transform: scale(1.02);
+    }
+
+    .node-card.online {
+      border-color: #00cc66;
+    }
+
+    .node-card.offline {
+      border-color: #cc0033;
+    }
+
+    .node-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .hostname {
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+
+    .status-badge {
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 0.8em;
+      color: white;
+    }
+
+    .status-online {
+      background-color: #00cc66;
+    }
+
+    .status-offline {
+      background-color: #cc0033;
+    }
+
+    details summary {
+      margin-top: 10px;
+      cursor: pointer;
+      color: #aaa;
+      font-size: 0.9em;
+    }
+
+    details {
+      font-size: 0.9em;
+      margin-top: 8px;
+    }
+
+    .info-line {
+      margin: 4px 0;
+      color: #ccc;
+    }
+
+    .node-checkbox {
+      margin-right: 10px;
+    }
+
+    pre#broadcastOutput {
+      background-color: #111;
+      padding: 10px;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <h1>🌍 Global Inference Engine: Node Dashboard</h1>
+
+  <div class="control-panel">
+    <h3>⚙️ Command Control</h3>
+    <label><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"> Select All</label><br><br>
+    <input type="text" id="commandInput" placeholder="Enter shell command to push..." />
+    <button onclick="broadcastCommand()">Push</button>
+    <button onclick="pingNodes()">Ping</button>
+    <pre id="broadcastOutput"></pre>
+  </div>
+
+  <div class="node-grid" id="nodeGrid">Loading...</div>
+
+  <script>
+    let nodes = [];
+    const openDetails = new Set();
+
+    function saveOpenStates() {
+      openDetails.clear();
+      document.querySelectorAll(".node-card details").forEach(detail => {
+        if (detail.open) {
+          openDetails.add(detail.dataset.hostname);
+        }
+      });
+    }
+
+    function restoreOpenStates() {
+      document.querySelectorAll(".node-card details").forEach(detail => {
+        if (openDetails.has(detail.dataset.hostname)) {
+          detail.open = true;
+        }
+      });
+    }
+
+    async function fetchNodes() {
+      saveOpenStates();
+
+      const res = await fetch("/nodes");
+      nodes = await res.json();
+      const grid = document.getElementById("nodeGrid");
+      grid.innerHTML = "";
+
+      nodes.forEach(node => {
+        const card = document.createElement("div");
+        card.className = `node-card ${node.status}`;
+
+        const lastSeen = new Date(node.last_seen * 1000).toLocaleString();
+
+        card.innerHTML = `
+          <div class="node-header">
+            <div>
+              <label>
+                <input type="checkbox" class="node-checkbox" data-hostname="${node.hostname}" />
+                <span class="hostname">${node.hostname}</span>
+              </label>
+            </div>
+            <div class="status-badge status-${node.status}">${node.status.toUpperCase()}</div>
+          </div>
+          <details data-hostname="${node.hostname}">
+            <summary>Details</summary>
+            <div class="info-line">📍 IP: ${node.ip || 'N/A'}</div>
+            <div class="info-line">🕒 Last Seen: ${lastSeen}</div>
+            <div class="info-line">🧠 Task: ${node.task || 'Idle'}</div>
+            <div class="info-line">📊 CPU: ${node.cpu || 'n/a'}</div>
+            <div class="info-line">💾 RAM: ${node.ram || 'n/a'}</div>
+          </details>
+        `;
+
+        grid.appendChild(card);
+      });
+
+      restoreOpenStates();
+    }
+
+    function toggleSelectAll() {
+      const checkboxes = document.querySelectorAll(".node-checkbox");
+      const selectAll = document.getElementById("selectAll").checked;
+      checkboxes.forEach(cb => cb.checked = selectAll);
+    }
+
+    async function broadcastCommand() {
+      const selected = Array.from(document.querySelectorAll(".node-checkbox:checked")).map(cb => cb.dataset.hostname);
+      const command = document.getElementById("commandInput").value;
+
+      if (!selected.length || !command) {
+        alert("Please select at least one node and enter a command.");
+        return;
+      }
+
+      const res = await fetch("/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodes: selected, command })
+      });
+
+      const data = await res.json();
+      document.getElementById("broadcastOutput").innerText = JSON.stringify(data, null, 2);
+    }
+
+    async function pingNodes() {
+      const res = await fetch("/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodes: nodes.map(n => n.hostname), command: "ping -c 1 127.0.0.1" })
+      });
+
+      const data = await res.json();
+      document.getElementById("broadcastOutput").innerText = JSON.stringify(data, null, 2);
+    }
+
+    fetchNodes();
+    setInterval(fetchNodes, 10000);
+  </script>
+</body>
+</html>
